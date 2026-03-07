@@ -67,6 +67,22 @@ const userSchema = new mongoose.Schema({
   planExpiresAt: {
     type: Date,
     default: null
+  },
+  // Additional profile fields
+  phoneNumber: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  businessName: {
+    type: String,
+    default: null,
+    trim: true,
+    maxlength: [200, 'Business name cannot exceed 200 characters']
+  },
+  timezone: {
+    type: String,
+    default: 'UTC'
   }
 }, {
   timestamps: true

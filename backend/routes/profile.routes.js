@@ -42,16 +42,28 @@ const getProfile = async (req, res) => {
     });
 
     // Return name directly from user object (not derived from email)
+    // Include all user profile fields
     return res.status(200).json({
       success: true,
-      profile: profile || null,
+      // User profile data
       name: user ? user.name : '',
       email: user ? user.email : '',
-      avatarUrl: user ? user.avatarUrl : null
+      avatarUrl: user ? user.avatarUrl : null,
+      phoneNumber: user ? user.phoneNumber : null,
+      businessName: user ? user.businessName : null,
+      timezone: user ? user.timezone : 'UTC',
+      // Restaurant profile (AI settings)
+      profile: profile || null,
+      restaurantName: profile?.restaurantName || '',
+      brandTone: profile?.brandTone || 'professional',
+      emojiAllowed: profile?.emojiAllowed ?? true,
+      cuisineType: profile?.cuisineType || '',
+      replyMode: profile?.replyMode || 'manual',
+      replyDelayMinutes: profile?.replyDelayMinutes || 0
     });
 
   } catch (error) {
-    console.error('Get Profile Error:', error);
+    logger.error('Get Profile Error', { error: error.message, userId: req.userId });
     return res.status(500).json({
       success: false,
       error: 'Failed to get profile'
@@ -60,13 +72,28 @@ const getProfile = async (req, res) => {
 };
 
 /**
- * Create or update restaurant profile
+ * Create or update restaurant profile and user profile
  */
 const saveProfile = async (req, res) => {
   try {
-    const { restaurantName, brandTone, emojiAllowed, cuisineType, replyMode, replyDelayMinutes } = req.body;
+    const { 
+      // User profile fields
+      name, phoneNumber, businessName, timezone,
+      // Restaurant profile fields  
+      restaurantName, brandTone, emojiAllowed, cuisineType, replyMode, replyDelayMinutes 
+    } = req.body;
 
-    // Validate required fields
+    // Update user profile fields if provided
+    const user = await User.findById(req.userId);
+    if (user) {
+      if (name !== undefined) user.name = name.trim();
+      if (phoneNumber !== undefined) user.phoneNumber = phoneNumber || null;
+      if (businessName !== undefined) user.businessName = businessName || null;
+      if (timezone !== undefined) user.timezone = timezone || 'UTC';
+      await user.save();
+    }
+
+    // Validate restaurant name if provided
     if (!restaurantName) {
       return res.status(400).json({
         success: false,
@@ -128,14 +155,21 @@ const saveProfile = async (req, res) => {
       await profile.save();
     }
 
+    logger.info('Profile saved', { userId: req.userId });
+
     return res.status(200).json({
       success: true,
       message: 'Profile saved successfully',
-      profile
+      name: user?.name,
+      phoneNumber: user?.phoneNumber,
+      businessName: user?.businessName,
+      timezone: user?.timezone,
+      restaurantName: profile.restaurantName,
+      brandTone: profile.brandTone
     });
 
   } catch (error) {
-    console.error('Save Profile Error:', error);
+    logger.error('Save Profile Error', { error: error.message, userId: req.userId });
     return res.status(500).json({
       success: false,
       error: 'Failed to save profile'
@@ -211,8 +245,16 @@ const uploadAvatar = async (req, res) => {
     user.avatarUrl = newAvatarUrl;
     await user.save();
 
+    logger.info('Avatar uploaded', { userId: req.userId, avatarUrl: newAvatarUrl });
+
+    // Return full URL that frontend can use
+    const baseUrl = process.env.FRONTEND_URL?.replace('/api', '') || 'http://localhost:3000';
+    
     return res.status(200).json({
       success: true,
+      avatarUrl: newAvatarUrl,
+      fullAvatarUrl: `${baseUrl}${newAvatarUrl}`
+    });
       message: 'Avatar uploaded successfully',
       avatarUrl: newAvatarUrl
     });

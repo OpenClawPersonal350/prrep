@@ -235,6 +235,25 @@ class ApiService {
     }
   }
 
+  // Billing / Subscription
+  async getSubscription() {
+    try {
+      const response = await apiClient.get('/billing/subscription');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch subscription');
+    }
+  }
+
+  async createCheckoutSession(plan: string) {
+    try {
+      const response = await apiClient.post('/billing/create-checkout-session', { plan });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to create checkout session');
+    }
+  }
+
   // User helpers
   getAuthToken(): string | null {
     return localStorage.getItem('replycraft_token');
