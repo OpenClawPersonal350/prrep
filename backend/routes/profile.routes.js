@@ -252,11 +252,9 @@ const uploadAvatar = async (req, res) => {
     
     return res.status(200).json({
       success: true,
+      message: 'Avatar uploaded successfully',
       avatarUrl: newAvatarUrl,
       fullAvatarUrl: `${baseUrl}${newAvatarUrl}`
-    });
-      message: 'Avatar uploaded successfully',
-      avatarUrl: newAvatarUrl
     });
 
   } catch (error) {
