@@ -100,11 +100,9 @@ const logger = winston.createLogger({
 });
 
 // Add console transport in development
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: consoleFormat
-  }));
-}
+logger.add(new winston.transports.Console({
+  format: consoleFormat
+}));
 
 // Helper methods for structured logging
 logger.logAuth = (action, data) => {
