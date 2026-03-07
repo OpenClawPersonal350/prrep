@@ -8,17 +8,14 @@ const { ExpressAdapter } = require('@bull-board/express');
 const { replyQueue } = require('../queues/reply.queue');
 
 // Create Bull adapters for each queue
-const bullAdapters = [
-  new ExpressAdapter(replyQueue, { readOnlyMode: false })
+const adapters = [
+  new ExpressAdapter().setQueues(replyQueue)
 ];
 
 // Create Bull Board instance
-const { router: bullBoardRouter, setQueues, replaceQueues } = createBullBoard(bullAdapters);
+const { router: bullBoardRouter } = createBullBoard(adapters);
 
 // Export for use in server.js
 module.exports = {
-  bullBoardRouter,
-  setQueues,
-  replaceQueues,
-  bullAdapters
+  bullBoardRouter
 };
