@@ -29,6 +29,16 @@ const SettingsPage = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Cleanup object URL when component unmounts
+  useEffect(() => {
+    return () => {
+      if (cropImageSrc && cropImageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(cropImageSrc);
+      }
+    };
+  }, []);
 
   // AI Settings Section
   const [restaurantName, setRestaurantName] = useState("");
@@ -126,19 +136,37 @@ const SettingsPage = () => {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.addEventListener('load', () => setCropImageSrc(reader.result?.toString() || null));
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+
+    // Create object URL for the image
+    const imageUrl = URL.createObjectURL(file);
+    setSelectedFile(file);
+    setCropImageSrc(imageUrl);
+    
+    // Reset file input
     if (e.target) {
       e.target.value = '';
     }
   };
 
+  // Handle cancel - close modal and cleanup
+  const handleCropCancel = () => {
+    if (cropImageSrc && cropImageSrc.startsWith('blob:')) {
+      URL.revokeObjectURL(cropImageSrc);
+    }
+    setCropImageSrc(null);
+    setSelectedFile(null);
+  };
+
   const handleCropComplete = async (croppedBlob: Blob) => {
     try {
+      // Cleanup the object URL
+      if (cropImageSrc && cropImageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(cropImageSrc);
+      }
       setCropImageSrc(null);
+      setSelectedFile(null);
+      
       const response = await apiService.uploadAvatar(croppedBlob);
       
       if (response.success && response.fullAvatarUrl) {
@@ -421,7 +449,7 @@ const SettingsPage = () => {
         <ImageCropper
           src={cropImageSrc}
           onCropComplete={handleCropComplete}
-          onCancel={() => setCropImageSrc(null)}
+          onCancel={handleCropCancel}
         />
       )}
     </div>

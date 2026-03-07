@@ -6,12 +6,12 @@ import { Slider } from '@/components/ui/slider';
 import getCroppedImg from '@/lib/cropImage';
 
 interface ImageCropperProps {
-  imageSrc: string;
-  onClose: () => void;
+  src: string;
   onCropComplete: (croppedBlob: Blob) => void;
+  onCancel: () => void;
 }
 
-export function ImageCropper({ imageSrc, onClose, onCropComplete }: ImageCropperProps) {
+export function ImageCropper({ src, onCropComplete, onCancel }: ImageCropperProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
@@ -22,22 +22,29 @@ export function ImageCropper({ imageSrc, onClose, onCropComplete }: ImageCropper
   }, []);
 
   const handleSave = async () => {
-    if (!croppedAreaPixels) return;
+    if (!croppedAreaPixels || !src) return;
     try {
       setIsLoading(true);
-      const croppedImageBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
+      const croppedImageBlob = await getCroppedImg(src, croppedAreaPixels);
       if (croppedImageBlob) {
         onCropComplete(croppedImageBlob);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error cropping image:', e);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleCancel = () => {
+    onCancel();
+  };
+
+  // Don't render if no image source
+  if (!src) return null;
+
   return (
-    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={true} onOpenChange={(open) => !open && handleCancel()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Crop Image</DialogTitle>
@@ -45,7 +52,7 @@ export function ImageCropper({ imageSrc, onClose, onCropComplete }: ImageCropper
         
         <div className="relative w-full h-64 bg-black/10 rounded-lg overflow-hidden my-4">
           <Cropper
-            image={imageSrc}
+            image={src}
             crop={crop}
             zoom={zoom}
             aspect={1}
@@ -70,10 +77,10 @@ export function ImageCropper({ imageSrc, onClose, onCropComplete }: ImageCropper
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <Button variant="outline" onClick={handleCancel} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isLoading}>
+          <Button onClick={handleSave} disabled={isLoading || !croppedAreaPixels}>
             {isLoading ? "Saving..." : "Save Image"}
           </Button>
         </DialogFooter>
