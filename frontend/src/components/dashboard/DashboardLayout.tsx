@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, MessageSquare, BarChart3, Plug, Settings, CreditCard, LogOut,
-  Bell, Search, Menu, ChevronRight
+  Bell, Search, Menu, ChevronRight, Lightbulb
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Reviews", icon: MessageSquare, path: "/dashboard/reviews" },
   { label: "Analytics", icon: BarChart3, path: "/dashboard/analytics" },
+  { label: "Insights", icon: Lightbulb, path: "/dashboard/insights" },
   { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
   { label: "Settings", icon: Settings, path: "/dashboard/settings" },
   { label: "Billing", icon: CreditCard, path: "/dashboard/billing" },

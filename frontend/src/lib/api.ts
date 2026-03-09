@@ -396,6 +396,34 @@ class ApiService {
     }
   }
 
+  // Insights endpoints
+  async getInsights() {
+    try {
+      const response = await apiClient.get('/insights');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch insights');
+    }
+  }
+
+  async getInsightsHistory(limit?: number) {
+    try {
+      const response = await apiClient.get('/insights/history', { params: { limit } });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch insights history');
+    }
+  }
+
+  async generateInsights() {
+    try {
+      const response = await apiClient.post('/insights/generate');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to generate insights');
+    }
+  }
+
   async setDefaultAIConfiguration(id: string) {
     try {
       const response = await apiClient.post(`/ai-config/${id}/set-default`);
@@ -442,6 +470,9 @@ export const generateReply = (reviewText: string, tone?: string) => apiService.g
 export const getGoogleConnections = () => apiService.getGoogleConnections();
 export const connectGoogle = () => apiService.connectGoogle();
 export const disconnectGoogle = (id: string) => apiService.disconnectGoogle(id);
+export const getInsights = () => apiService.getInsights();
+export const getInsightsHistory = (limit?: number) => apiService.getInsightsHistory(limit);
+export const generateInsights = () => apiService.generateInsights();
 
 // Types
 export interface User {
@@ -482,5 +513,23 @@ export interface AnalyticsOverview {
   pendingApprovals: number;
   reviewsOverTime?: {name: string, reviews: number, replies: number}[];
   sentimentBreakdown?: {positive: number, neutral: number, negative: number};
+}
+
+export interface Insight {
+  _id: string;
+  userId: string;
+  topComplaints: { keyword: string; count: number; examples: string[] }[];
+  topPraises: { keyword: string; count: number; examples: string[] }[];
+  commonKeywords: { keyword: string; count: number }[];
+  reviewCount: number;
+  averageRating: number;
+  positivePercentage: number;
+  negativePercentage: number;
+  neutralPercentage: number;
+  platformBreakdown: Record<string, number>;
+  summary: string | null;
+  generatedAt: string;
+  periodStart: string;
+  periodEnd: string;
 }
 

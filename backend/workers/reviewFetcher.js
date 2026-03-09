@@ -1,134 +1,201 @@
 const cron = require('node-cron');
 const BusinessConnection = require('../models/BusinessConnection');
 const Review = require('../models/Review');
-const RestaurantProfile = require('../models/RestaurantProfile');
-const googleReviewsService = require('../services/googleReviews.service');
-const { queueReplyGeneration } = require('../queues/reply.queue');
 const User = require('../models/User');
+const { platformManager } = require('../integrations');
+const { queueReplyGeneration } = require('../queues/reply.queue');
 const logger = require('../utils/logger');
 
-logger.info('Review Fetcher worker started');
+logger.info('Multi-platform Review Fetcher worker started');
 
 /**
- * Fetch and queue new reviews for processing
- * IDEMPOTENCY: Checks for duplicate reviews before processing
+ * Fetch and queue new reviews from all active connections
+ * Uses unique index { platform: 1, platformReviewId: 1 } for duplicate protection
  */
 async function fetchAndQueueReviews() {
   try {
-    logger.info('Running review fetch');
+    logger.info('Starting multi-platform review fetch');
     
     // Get all active business connections
-    const connections = await BusinessConnection.find({ isActive: true });
+    const connections = await BusinessConnection.find({ 
+      isActive: true,
+      status: 'active'
+    });
     
     logger.info('Found active connections', { count: connections.length });
     
-    let newReviewsCount = 0;
-    let duplicatesSkipped = 0;
-    let queuedCount = 0;
+    if (connections.length === 0) {
+      logger.info('No active connections to process');
+      return;
+    }
     
+    const stats = {
+      newReviews: 0,
+      duplicates: 0,
+      queued: 0,
+      errors: 0,
+      byPlatform: {}
+    };
+    
+    // Process each connection
     for (const connection of connections) {
+      const platform = connection.platform || 'google';
+      
+      // Initialize platform stats
+      if (!stats.byPlatform[platform]) {
+        stats.byPlatform[platform] = { newReviews: 0, duplicates: 0, errors: 0 };
+      }
+      
       try {
-        // Fetch reviews from Google
-        const googleReviews = await googleReviewsService.fetchReviews(connection);
+        // Validate platform is supported
+        if (!platformManager.isPlatformSupported(platform)) {
+          logger.warn('Skipping unsupported platform', { platform });
+          continue;
+        }
+        
+        // Ensure connection is valid (token refresh if needed)
+        const isConnected = await platformManager.connect(connection);
+        if (!isConnected) {
+          logger.warn('Connection failed, skipping', { 
+            platform, 
+            locationId: connection.locationId 
+          });
+          stats.errors++;
+          stats.byPlatform[platform].errors++;
+          continue;
+        }
+        
+        // Fetch reviews from platform
+        const rawReviews = await platformManager.fetchReviews(connection);
+        
+        logger.info(`Fetched reviews from ${platform}`, { 
+          locationId: connection.locationId,
+          count: rawReviews.length 
+        });
         
         // Process each review
-        for (const googleReview of googleReviews) {
-          const transformed = googleReviewsService.transformReview(googleReview);
-          
-          // IDEMPOTENCY: Check if review already exists (duplicate protection)
-          const existingReview = await Review.findOne({ reviewId: transformed.reviewId });
-          
-          if (existingReview) {
-            duplicatesSkipped++;
-            logger.warn('Duplicate review skipped', {
-              platform: 'google',
-              externalReviewId: transformed.reviewId,
-              existingStatus: existingReview.status
-            });
-            continue; // Skip duplicate
-          }
-          
-          // Also check by external ID if available
-          if (transformed.reviewId) {
-            const existingByExternal = await Review.findOne({ 
-              platform: 'google',
-              externalReviewId: transformed.reviewId 
+        for (const rawReview of rawReviews) {
+          try {
+            // Transform to normalized format
+            const normalized = platformManager.transformReview(platform, rawReview);
+            
+            // Skip if no valid platform review ID
+            if (!normalized.platformReviewId) {
+              logger.warn('Skipping review without platformReviewId', { platform });
+              continue;
+            }
+            
+            // Check for existing review (duplicate protection)
+            // Uses unique index: { platform: 1, platformReviewId: 1 }
+            const existingReview = await Review.findOne({
+              platform: platform,
+              platformReviewId: normalized.platformReviewId
             });
             
-            if (existingByExternal) {
-              duplicatesSkipped++;
-              logger.warn('Duplicate review skipped (external ID)', {
-                platform: 'google',
-                externalReviewId: transformed.reviewId,
-                existingStatus: existingByExternal.status
+            if (existingReview) {
+              stats.duplicates++;
+              stats.byPlatform[platform].duplicates++;
+              continue;
+            }
+            
+            // Get user
+            const user = await User.findById(connection.userId);
+            
+            if (!user || !user.isActive) {
+              logger.warn('User not found or inactive', { 
+                userId: connection.userId,
+                platform 
               });
               continue;
             }
-          }
-          
-          // Get user
-          const user = await User.findById(connection.userId);
-          
-          if (!user || !user.isActive) {
-            logger.warn('User not found or inactive', { userId: connection.userId });
-            continue;
-          }
-          
-          // Create review record first (to prevent duplicates)
-          const newReview = new Review({
-            reviewId: transformed.reviewId,
-            externalReviewId: transformed.reviewId, // Store for idempotency
-            userId: user._id,
-            connectionId: connection._id,
-            platform: 'google',
-            reviewText: transformed.text,
-            rating: transformed.rating,
-            author: transformed.author,
-            authorPhotoUrl: transformed.authorPhotoUrl,
-            status: 'pending'
-          });
-          
-          await newReview.save();
-          newReviewsCount++;
-          
-          // Queue AI reply generation job
-          try {
-            await queueReplyGeneration({
-              reviewId: transformed.reviewId,
-              userId: user._id.toString(),
-              platform: 'google',
-              entityType: 'location',
-              reviewText: transformed.text,
-              rating: transformed.rating
+            
+            // Create review record
+            const newReview = new Review({
+              // Internal unique ID
+              reviewId: `${platform}_${normalized.platformReviewId}`,
+              
+              // Platform identifiers
+              platform: platform,
+              platformReviewId: normalized.platformReviewId,
+              platformLocationId: normalized.platformLocationId,
+              externalReviewId: normalized.platformReviewId,
+              
+              // User association
+              userId: user._id,
+              connectionId: connection._id,
+              
+              // Review data
+              reviewText: normalized.text,
+              rating: normalized.rating,
+              author: normalized.author,
+              authorPhotoUrl: normalized.authorPhotoUrl,
+              
+              // Status
+              replyStatus: 'pending',
+              fetchedAt: new Date()
             });
-            queuedCount++;
-          } catch (queueError) {
-            logger.error('Failed to queue review', { reviewId: transformed.reviewId, error: queueError.message });
+            
+            await newReview.save();
+            stats.newReviews++;
+            stats.byPlatform[platform].newReviews++;
+            
+            // Queue for AI reply generation
+            try {
+              await queueReplyGeneration({
+                reviewId: newReview.reviewId,
+                userId: user._id.toString(),
+                platform: platform,
+                entityType: 'location',
+                reviewText: normalized.text,
+                rating: normalized.rating
+              });
+              stats.queued++;
+            } catch (queueError) {
+              logger.error('Failed to queue review', { 
+                reviewId: newReview.reviewId, 
+                error: queueError.message 
+              });
+            }
+            
+          } catch (transformError) {
+            logger.error('Error transforming review', { 
+              platform,
+              error: transformError.message 
+            });
+            stats.errors++;
+            stats.byPlatform[platform].errors++;
           }
         }
         
-      } catch (error) {
-        logger.error('Error fetching for connection', { connectionId: connection._id, error: error.message });
+      } catch (connectionError) {
+        logger.error('Error processing connection', { 
+          connectionId: connection._id,
+          platform,
+          error: connectionError.message 
+        });
+        stats.errors++;
+        stats.byPlatform[platform].errors++;
       }
     }
     
-    logger.logReview('Review fetch completed', { 
-      newReviews: newReviewsCount, 
-      duplicatesSkipped, 
-      queuedCount 
-    });
+    // Log summary
+    logger.logReview('Multi-platform review fetch completed', stats);
     
   } catch (error) {
-    logger.error('Review fetcher fatal error', { error: error.message, stack: error.stack });
+    logger.error('Review fetcher fatal error', { 
+      error: error.message, 
+      stack: error.stack 
+    });
   }
 }
 
 // Run every 5 minutes
 cron.schedule('*/5 * * * *', fetchAndQueueReviews);
 
-// Also run on startup (after a short delay to ensure server is ready)
+// Run on startup (after a short delay to ensure server is ready)
 setTimeout(fetchAndQueueReviews, 10000);
 
+// Export for manual triggering
 module.exports = {
   fetchAndQueueReviews
 };

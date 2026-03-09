@@ -11,6 +11,7 @@ import Signup from "./pages/Signup";
 import DashboardHome from "./pages/DashboardHome";
 import Reviews from "./pages/Reviews";
 import Analytics from "./pages/Analytics";
+import Insights from "./pages/Insights";
 import Integrations from "./pages/Integrations";
 import SettingsPage from "./pages/SettingsPage";
 import Billing from "./pages/Billing";
@@ -85,6 +86,7 @@ const AppRoutes = () => {
       <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
       <Route path="/dashboard/reviews" element={<ProtectedRoute><Reviews /></ProtectedRoute>} />
       <Route path="/dashboard/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+      <Route path="/dashboard/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
       <Route path="/dashboard/integrations" element={<ProtectedRoute><Integrations /></ProtectedRoute>} />
       <Route path="/dashboard/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/dashboard/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />

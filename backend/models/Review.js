@@ -12,6 +12,15 @@ const reviewSchema = new mongoose.Schema({
     type: String,
     index: true
   },
+  // Platform-specific review ID (e.g., Google review name, Yelp review ID)
+  platformReviewId: {
+    type: String,
+    index: true
+  },
+  // Platform-specific location ID (e.g., Google location ID, Yelp business ID)
+  platformLocationId: {
+    type: String
+  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -94,7 +103,7 @@ reviewSchema.index({ userId: 1, createdAt: -1 });
 reviewSchema.index({ connectionId: 1, createdAt: -1 });
 reviewSchema.index({ reviewId: 1, platform: 1 }, { unique: true });
 
-// IDEMPOTENCY: Compound unique index on platform + externalReviewId
-reviewSchema.index({ platform: 1, externalReviewId: 1 }, { unique: true, sparse: true });
+// IDEMPOTENCY: Compound unique index on platform + platformReviewId
+reviewSchema.index({ platform: 1, platformReviewId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Review', reviewSchema);
